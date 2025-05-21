@@ -3,6 +3,7 @@ import os
 import re
 from flask import Flask, request, jsonify
 import fitz  # PyMuPDF
+from docx import Document
 from flask_cors import CORS
 
 load_dotenv()
@@ -21,7 +22,7 @@ def clean_text(text: str) -> str:
 def index():
     return jsonify({"message": "PDF Text Extractor API"}), 200
 
-@app.route('/extract', methods=['POST'])
+@app.route('/extract-pdf', methods=['POST'])
 def extract_text():
     api_key = request.headers.get('X-API-KEY')
     if not api_key or api_key != API_SECRET_KEY:
@@ -44,6 +45,53 @@ def extract_text():
 
     # Return only the raw cleaned text
     return jsonify({"rawText": full_text.strip()})
+
+
+@app.route('/extract-doc', methods=['POST'])
+def extract_doc_text():
+    api_key = request.headers.get('X-API-KEY')
+    if not api_key or api_key != API_SECRET_KEY:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith(('.doc', '.docx')):
+        return jsonify({'error': 'Invalid file type. Only .doc and .docx allowed'}), 400
+
+    try:
+        document = Document(file)
+        full_text = ""
+        for para in document.paragraphs:
+            cleaned = clean_text(para.text)
+            full_text += cleaned + "\n"
+    except Exception as e:
+        return jsonify({'error': f'Failed to read DOCX file: {str(e)}'}), 400
+
+    return jsonify({"rawText": full_text.strip()})
+
+
+@app.route('/extract-txt', methods=['POST'])
+def extract_txt_text():
+    api_key = request.headers.get('X-API-KEY')
+    if not api_key or api_key != API_SECRET_KEY:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['file']
+    if not file.filename.endswith('.txt'):
+        return jsonify({'error': 'Invalid file type. Only .txt allowed'}), 400
+
+    try:
+        content = file.read().decode('utf-8', errors='ignore')
+        cleaned = clean_text(content)
+    except Exception as e:
+        return jsonify({'error': f'Failed to read TXT file: {str(e)}'}), 400
+
+    return jsonify({"rawText": cleaned.strip()})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
